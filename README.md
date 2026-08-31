@@ -56,8 +56,19 @@ Bundles differ in their inference config keys; most modern ones accept
 
 | Bundle | Works | Notes |
 |---|---|---|
-| `spleen_ct_segmentation` | untested | canonical example, first target |
+| `spleen_ct_segmentation` | ✅ 2026-08-31 | Full CS round-trip verified on demo02 (RTX 4090, ~1s inference); MSD `imagesTs` layout auto-staged |
 | `wholeBody_ct_segmentation` | untested | 104 structures (TotalSegmentator-trained) |
+
+### Launching via REST
+
+The launch endpoint takes the numeric wrapper ID, not the wrapper name:
+
+```bash
+WID=$(curl -su admin "https://your-xnat/xapi/commands/<cmd-id>" | jq -r '.xnat[] | select(.name=="monai-bundle-scan").id')
+curl -su admin -X POST "https://your-xnat/xapi/projects/<proj>/wrappers/$WID/root/scan/launch" \
+  -H 'Content-Type: application/json' \
+  -d '{"scan":"/experiments/<session>/scans/<scan>","bundle-name":"spleen_ct_segmentation"}'
+```
 
 ## Licensing
 
