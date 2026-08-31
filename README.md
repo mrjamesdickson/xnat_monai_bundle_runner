@@ -56,8 +56,17 @@ Bundles differ in their inference config keys; most modern ones accept
 
 | Bundle | Works | Notes |
 |---|---|---|
-| `spleen_ct_segmentation` | ✅ 2026-08-31 | Full CS round-trip verified on demo02 (RTX 4090, ~1s inference); MSD `imagesTs` layout auto-staged |
+| `spleen_ct_segmentation` | ✅ 2026-08-31 | Verified end-to-end on a real abdomen/pelvis CT (CPTAC C3L-00189): segmented 302.9 mL as one connected label — anatomically plausible spleen. RTX 4090, ~8s inference. |
 | `wholeBody_ct_segmentation` | untested | 104 structures (TotalSegmentator-trained) |
+
+### Input staging
+
+Bundles glob a path under `dataset_dir` (typically `imagesTs/*.nii.gz`), but an XNAT
+resource is a flat directory that may hold uncompressed `.nii` plus JSON sidecars.
+The runner reads the glob out of the bundle's inference config and stages inputs to
+match it — creating the expected subdirectory, gzip/gunzip-ing to the expected
+extension, and skipping non-image files. Without this the dataloader silently comes
+up empty and the bundle "succeeds" with no output.
 
 ### Launching via REST
 
