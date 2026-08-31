@@ -6,9 +6,10 @@ RUN pip install --no-cache-dir \
     pytorch-ignite \
     einops \
     fire \
-    scikit-image
+    scikit-image \
+    pytest
 
-COPY run_bundle.sh /opt/runner/run_bundle.sh
+COPY run_bundle.sh make_report.py /opt/runner/
 RUN chmod +x /opt/runner/run_bundle.sh
 
 # Bundles download here at runtime; mount a volume to cache across runs

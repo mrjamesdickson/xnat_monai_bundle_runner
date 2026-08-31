@@ -135,10 +135,19 @@ fi
 
 python -m monai.bundle run "${run_args[@]}"
 
-echo "=== output files ==="
-find "${OUTPUT_DIR}" -type f | head -50
 if [ -z "$(ls -A "${OUTPUT_DIR}" 2>/dev/null)" ]; then
     echo "ERROR: bundle produced no output in ${OUTPUT_DIR}" >&2
     exit 1
 fi
+
+echo "=== volumetrics ==="
+# The report is a convenience layer: a bundle whose output is not a label map
+# still succeeds, so never fail the run on report generation alone.
+if ! BUNDLE_ROOT="${BUNDLE_ROOT}" OUTPUT_DIR="${OUTPUT_DIR}" \
+     python /opt/runner/make_report.py; then
+    echo "WARNING: volumetrics report failed; segmentation output is unaffected" >&2
+fi
+
+echo "=== output files ==="
+find "${OUTPUT_DIR}" -type f | head -50
 echo "=== done ==="
