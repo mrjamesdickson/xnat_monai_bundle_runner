@@ -41,6 +41,23 @@ curl -u admin -X POST "https://your-xnat/xapi/commands" \
 Then enable the command site-wide and per-project, and launch from a scan's
 Run Containers menu with the bundle name of your choice.
 
+## Volumetrics report
+
+Every run also measures the masks it produced and writes three files into the same
+`MONAI` resource:
+
+| File | Contents |
+|---|---|
+| `report.html` | Self-contained report: total volume, structure count, and a per-structure table with proportional bars (light/dark mode, no external assets) |
+| `volumes.json` | Machine-readable volumes plus voxel size, matrix, and voxel counts |
+| `volumes.csv` | Flat rows for spreadsheets and cross-session aggregation |
+
+Volumes come from voxel counts multiplied by the image's own spacing. Structure
+names are read from the bundle's `metadata.json` `channel_def` when it declares
+them (so the spleen bundle reports "spleen", not "label 1"), falling back to label
+numbers otherwise. Report generation never fails a run — a bundle whose output
+isn't a label map still completes with its segmentation intact.
+
 ## Inputs
 
 | Input | Required | Description |
