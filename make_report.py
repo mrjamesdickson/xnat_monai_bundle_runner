@@ -64,6 +64,7 @@ td.name { font-weight: 500; }
             border-radius: 0 4px 4px 0; min-width: 2px; }
 .file-heading { font-size: 13px; font-weight: 600; color: var(--text-secondary);
                 margin: 28px 0 10px; word-break: break-all; }
+.caption { color: var(--text-muted); font-size: 12px; margin: 8px 0 0; }
 footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border);
          color: var(--text-muted); font-size: 12px; }
 footer p { margin: 4px 0; }
@@ -207,16 +208,14 @@ def render_html(report: dict) -> str:
         parts.append("</tbody></table>")
 
         voxel = " &times; ".join(f"{size:g}" for size in result["voxel_size_mm"])
-        parts.append(
-            f'<footer><p>Voxel size {voxel} mm &middot; '
-            f'matrix {" &times; ".join(str(dimension) for dimension in result["shape"])}</p>'
-        )
-        parts.append(
-            "<p>Volumes are computed from voxel counts and image spacing. "
-            "Research and decision support only &mdash; not a medical device, "
-            "not for diagnostic use.</p></footer>"
-        )
+        matrix = " &times; ".join(str(dimension) for dimension in result["shape"])
+        parts.append(f'<p class="caption">Voxel size {voxel} mm &middot; matrix {matrix}</p>')
 
+    parts.append(
+        "<footer><p>Volumes are computed from voxel counts and image spacing. "
+        "Research and decision support only &mdash; not a medical device, "
+        "not for diagnostic use.</p></footer>"
+    )
     parts.append("</div></body></html>")
     return "\n".join(parts)
 

@@ -115,6 +115,28 @@ def test_end_to_end_writes_all_three_artifacts(tmp_path):
     assert "0.50" in report_html
 
 
+def test_multiple_masks_share_one_disclaimer_and_are_all_listed(tmp_path):
+    for index, name in enumerate(["a", "b"], start=1):
+        data = np.zeros((6, 6, 6), dtype=np.uint8)
+        data[:index] = 1
+        write_mask(tmp_path / f"{name}.nii.gz", data)
+
+    env = {**os.environ, "OUTPUT_DIR": str(tmp_path), "BUNDLE_ROOT": str(tmp_path),
+           "BUNDLE_NAME": "multi"}
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "make_report.py")],
+        env=env, capture_output=True, text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    report_html = (tmp_path / "report.html").read_text()
+    assert report_html.count("not a medical device") == 1
+    assert report_html.count("<footer>") == 1
+    # Both masks are still reported, each with its own per-file caption.
+    assert "a.nii.gz" in report_html and "b.nii.gz" in report_html
+    assert report_html.count('class="caption"') == 2
+
+
 def test_report_survives_a_mask_it_cannot_measure(tmp_path):
     (tmp_path / "broken.nii.gz").write_bytes(b"not a nifti")
     data = np.zeros((4, 4, 4), dtype=np.uint8)
