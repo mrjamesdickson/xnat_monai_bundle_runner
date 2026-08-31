@@ -47,12 +47,13 @@ if [ -z "${CONFIG}" ]; then
 fi
 echo "config:  ${CONFIG}"
 
-# Many bundles glob a subdirectory of dataset_dir (MSD layout, e.g.
-# @dataset_dir + '/imagesTs/*.nii.gz'). XNAT mounts a flat resource dir, so
-# detect the expected sub-path from the config and stage symlinks to match.
+# Bundles glob a path under dataset_dir, e.g. @dataset_dir + '/imagesTs/*.nii.gz'.
+# XNAT mounts a flat resource directory whose files may not match either the
+# expected subdirectory or the expected compression (.nii vs .nii.gz), so read the
+# glob out of the inference config and stage the inputs to match it.
 DATASET_DIR="${INPUT_DIR}"
-SUBDIR=$(python - "${CONFIG}" <<'PYEOF'
-import json, re, sys, os
+GLOB=$(python - "${CONFIG}" <<'PYEOF'
+import json, re, sys
 try:
     import yaml
 except ImportError:
@@ -73,17 +74,51 @@ def walk(node):
         if m:
             yield m.group(1)
 for suffix in walk(cfg):
-    d = os.path.dirname(suffix)
-    if d and d != "/":
-        print(d.lstrip("/"))
-        break
+    print(suffix.lstrip("/"))
+    break
 PYEOF
 )
-if [ -n "${SUBDIR}" ]; then
-    echo "staging: bundle expects dataset_dir/${SUBDIR}, symlinking input files"
+
+if [ -n "${GLOB}" ]; then
+    SUBDIR=$(dirname "${GLOB}")
+    [ "${SUBDIR}" = "." ] && SUBDIR=""
+    # expected extension from the glob's basename, e.g. "*.nii.gz" -> ".nii.gz"
+    WANT_EXT=$(basename "${GLOB}" | sed 's/^\*//')
     STAGED=/tmp/staged-input
-    mkdir -p "${STAGED}/${SUBDIR}"
-    find "${INPUT_DIR}" -type f -exec ln -s {} "${STAGED}/${SUBDIR}/" \;
+    TARGET="${STAGED}${SUBDIR:+/${SUBDIR}}"
+    echo "staging: bundle globs '${GLOB}' -> staging inputs into ${TARGET}"
+    mkdir -p "${TARGET}"
+
+    staged_count=0
+    while IFS= read -r src; do
+        base=$(basename "${src}")
+        case "${base}" in
+            *.nii.gz) src_ext=".nii.gz" ;;
+            *.nii)    src_ext=".nii" ;;
+            *)        continue ;;   # skip sidecars (.json, catalogs, etc.)
+        esac
+        stem="${base%"${src_ext}"}"
+        dest="${TARGET}/${stem}${WANT_EXT}"
+        if [ "${src_ext}" = "${WANT_EXT}" ]; then
+            ln -sf "${src}" "${dest}"
+        elif [ "${src_ext}" = ".nii" ] && [ "${WANT_EXT}" = ".nii.gz" ]; then
+            echo "  compressing ${base} to match expected ${WANT_EXT}"
+            gzip -c "${src}" > "${dest}"
+        elif [ "${src_ext}" = ".nii.gz" ] && [ "${WANT_EXT}" = ".nii" ]; then
+            echo "  decompressing ${base} to match expected ${WANT_EXT}"
+            gunzip -c "${src}" > "${dest}"
+        else
+            ln -sf "${src}" "${dest}"
+        fi
+        staged_count=$((staged_count + 1))
+    done < <(find "${INPUT_DIR}" -type f)
+
+    if [ "${staged_count}" -eq 0 ]; then
+        echo "ERROR: no NIfTI files found in ${INPUT_DIR} to stage for glob '${GLOB}'" >&2
+        ls -la "${INPUT_DIR}" >&2
+        exit 1
+    fi
+    echo "staged ${staged_count} file(s)"
     DATASET_DIR="${STAGED}"
 fi
 
