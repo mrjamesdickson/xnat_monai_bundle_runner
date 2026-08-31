@@ -3,6 +3,8 @@ FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 RUN pip install --no-cache-dir \
     "monai[nibabel,itk,tqdm]==1.5.0" \
     huggingface_hub \
+    pytorch-ignite \
+    einops \
     fire \
     scikit-image
 
