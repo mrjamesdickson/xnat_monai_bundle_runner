@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static validation (command JSON, caret check, shell syntax)
+        run: bash tests/validate.sh
+      - name: Shellcheck
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+          shellcheck run_bundle.sh tests/validate.sh
+
+  build:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t xnatworks/monai-bundle-runner:ci .
+      - name: Entrypoint smoke test (fails fast on empty input, proving wiring)
+        run: |
+          mkdir -p /tmp/empty-input /tmp/out
+          if docker run --rm --entrypoint /opt/runner/run_bundle.sh \
+              -v /tmp/empty-input:/input:ro -v /tmp/out:/output \
+              -e BUNDLE_NAME=spleen_ct_segmentation \
+              xnatworks/monai-bundle-runner:ci; then
+            echo "Expected failure on empty input, got success" && exit 1
+          else
+            echo "Correctly refused empty input"
+          fi

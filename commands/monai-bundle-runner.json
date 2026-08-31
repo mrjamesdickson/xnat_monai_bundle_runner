@@ -1,0 +1,130 @@
+{
+    "name": "monai-bundle-runner",
+    "label": "MONAI Bundle Runner",
+    "description": "Run any MONAI Model Zoo bundle's inference config against XNAT data",
+    "version": "0.1.0",
+    "schema-version": "1.0",
+    "type": "docker",
+    "info-url": "https://github.com/mrjamesdickson/xnat_monai_bundle_runner",
+    "image": "xnatworks/monai-bundle-runner:latest",
+    "command-line": "/opt/runner/run_bundle.sh",
+    "runtime": "nvidia",
+    "limit-memory": 16384,
+    "shm-size": 1073741824,
+    "environment-variables": {
+        "BUNDLE_NAME": "#bundle-name#",
+        "BUNDLE_VERSION": "#bundle-version#",
+        "EXTRA_ARGS": "#extra-args#"
+    },
+    "inputs": [
+        {
+            "name": "bundle-name",
+            "description": "MONAI Model Zoo bundle name (e.g. spleen_ct_segmentation)",
+            "type": "string",
+            "required": true
+        },
+        {
+            "name": "bundle-version",
+            "description": "Optional bundle version pin (latest if empty)",
+            "type": "string",
+            "required": false,
+            "default-value": ""
+        },
+        {
+            "name": "extra-args",
+            "description": "Optional extra monai.bundle run overrides for non-standard bundles",
+            "type": "string",
+            "required": false,
+            "default-value": ""
+        }
+    ],
+    "mounts": [
+        {
+            "name": "input-mount",
+            "writable": false,
+            "path": "/input"
+        },
+        {
+            "name": "output-mount",
+            "writable": true,
+            "path": "/output"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "bundle-output",
+            "description": "All files produced by the bundle inference run",
+            "mount": "output-mount",
+            "required": true
+        }
+    ],
+    "xnat": [
+        {
+            "name": "monai-bundle-scan",
+            "label": "MONAI Bundle (scan)",
+            "description": "Run a MONAI bundle on a scan's NIFTI resource",
+            "contexts": ["xnat:imageScanData"],
+            "external-inputs": [
+                {
+                    "name": "scan",
+                    "description": "Input scan with a NIFTI resource",
+                    "type": "Scan",
+                    "required": true,
+                    "matcher": "'NIFTI' in @.resources[*].label"
+                }
+            ],
+            "derived-inputs": [
+                {
+                    "name": "scan-nifti",
+                    "description": "The NIFTI resource on the scan",
+                    "type": "Resource",
+                    "derived-from-wrapper-input": "scan",
+                    "provides-files-for-command-mount": "input-mount",
+                    "matcher": "@.label == 'NIFTI'"
+                }
+            ],
+            "output-handlers": [
+                {
+                    "name": "monai-resource",
+                    "accepts-command-output": "bundle-output",
+                    "as-a-child-of-wrapper-input": "scan",
+                    "type": "Resource",
+                    "label": "MONAI"
+                }
+            ]
+        },
+        {
+            "name": "monai-bundle-session",
+            "label": "MONAI Bundle (session)",
+            "description": "Run a MONAI bundle on a session-level NIFTI resource",
+            "contexts": ["xnat:imageSessionData"],
+            "external-inputs": [
+                {
+                    "name": "session",
+                    "description": "Input session with a NIFTI resource",
+                    "type": "Session",
+                    "required": true
+                }
+            ],
+            "derived-inputs": [
+                {
+                    "name": "session-nifti",
+                    "description": "The NIFTI resource on the session",
+                    "type": "Resource",
+                    "derived-from-wrapper-input": "session",
+                    "provides-files-for-command-mount": "input-mount",
+                    "matcher": "@.label == 'NIFTI'"
+                }
+            ],
+            "output-handlers": [
+                {
+                    "name": "monai-resource",
+                    "accepts-command-output": "bundle-output",
+                    "as-a-child-of-wrapper-input": "session",
+                    "type": "Resource",
+                    "label": "MONAI"
+                }
+            ]
+        }
+    ]
+}
