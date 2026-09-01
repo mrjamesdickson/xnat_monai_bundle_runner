@@ -87,7 +87,7 @@
                 {
                     "name": "monai-resource",
                     "accepts-command-output": "bundle-output",
-                    "as-a-child-of-wrapper-input": "scan",
+                    "as-a-child-of": "scan",
                     "type": "Resource",
                     "label": "MONAI"
                 }
@@ -96,22 +96,31 @@
         {
             "name": "monai-bundle-session",
             "label": "MONAI Bundle (session)",
-            "description": "Run a MONAI bundle on a session-level NIFTI resource",
+            "description": "Run a MONAI bundle on a scan chosen from a session",
             "contexts": ["xnat:imageSessionData"],
             "external-inputs": [
                 {
                     "name": "session",
-                    "description": "Input session with a NIFTI resource",
+                    "description": "Input session",
                     "type": "Session",
                     "required": true
                 }
             ],
             "derived-inputs": [
                 {
-                    "name": "session-nifti",
-                    "description": "The NIFTI resource on the session",
-                    "type": "Resource",
+                    "name": "scan",
+                    "description": "Scan to segment (any scan in the session with a NIFTI resource)",
+                    "type": "Scan",
+                    "required": true,
+                    "user-settable": true,
                     "derived-from-wrapper-input": "session",
+                    "matcher": "'NIFTI' in @.resources[*].label"
+                },
+                {
+                    "name": "scan-nifti",
+                    "description": "The NIFTI resource on the chosen scan",
+                    "type": "Resource",
+                    "derived-from-wrapper-input": "scan",
                     "provides-files-for-command-mount": "input-mount",
                     "matcher": "@.label == 'NIFTI'"
                 }
@@ -120,7 +129,7 @@
                 {
                     "name": "monai-resource",
                     "accepts-command-output": "bundle-output",
-                    "as-a-child-of-wrapper-input": "session",
+                    "as-a-child-of": "scan",
                     "type": "Resource",
                     "label": "MONAI"
                 }

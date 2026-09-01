@@ -96,6 +96,23 @@ match it — creating the expected subdirectory, gzip/gunzip-ing to the expected
 extension, and skipping non-image files. Without this the dataloader silently comes
 up empty and the bundle "succeeds" with no output.
 
+### Wrapper contexts
+
+| Wrapper | Launch from | Input it segments |
+|---|---|---|
+| `monai-bundle-scan` | a scan | that scan's `NIFTI` resource |
+| `monai-bundle-session` | a session | a scan you pick from the session (any scan with a `NIFTI` resource) |
+
+The session wrapper reaches **down to the scans** rather than looking for a
+session-level `NIFTI` resource. Session-level NIfTI is rare — most XNAT data has it
+on the scan — and a session-scoped input that cannot resolve makes the launch form
+fail with `HTTP 400: required fields cannot be resolved`, which is how the UI reports
+it. Output lands on the chosen scan either way, next to the data it came from.
+
+Run `tests/launch_form_check.sh <host> <user> <project> <session> [scan]` after any
+wrapper change: it calls the same launch-form endpoint the "Run Containers" menu
+uses, so a wrapper that would fail to open in the UI fails there first.
+
 ### Launching via REST
 
 The launch endpoint takes the numeric wrapper ID, not the wrapper name:
@@ -106,6 +123,14 @@ curl -su admin -X POST "https://your-xnat/xapi/projects/<proj>/wrappers/$WID/roo
   -H 'Content-Type: application/json' \
   -d '{"scan":"/experiments/<session>/scans/<scan>","bundle-name":"spleen_ct_segmentation"}'
 ```
+
+For the session wrapper, either omit `scan` and let resolution pick the only
+matching one, or pass the **`/archive`-prefixed** URI the launch form reports
+(`/archive/experiments/<session>/scans/<scan>`). A bare `/experiments/...` URI for a
+*derived* input fails resolution, and because staging happens after the endpoint has
+already returned `HTTP 200` with a workflow id, the launch looks successful while no
+container is ever created — the evidence is only in
+`containers-services-commandresolution.log`.
 
 ## Licensing
 
