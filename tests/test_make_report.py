@@ -137,6 +137,80 @@ def test_multiple_masks_share_one_disclaimer_and_are_all_listed(tmp_path):
     assert report_html.count('class="caption"') == 2
 
 
+def test_itksnap_label_file_format(tmp_path):
+    text = make_report.itksnap_label_file({1: "spleen", 5: "liver"})
+    lines = [line for line in text.splitlines() if not line.startswith("#")]
+
+    # Index 0 is the reserved transparent entry ITK-SNAP requires.
+    assert lines[0].split() == ["0", "0", "0", "0", "0", "0", "0", '"Clear', 'Label"']
+
+    # Each data row is IDX R G B A VIS MSH "name" with 8 whitespace-split fields.
+    spleen = lines[1].split()
+    assert spleen[0] == "1"
+    assert all(0 <= int(channel) <= 255 for channel in spleen[1:4])
+    assert spleen[4:7] == ["1", "1", "1"]
+    assert spleen[7] == '"spleen"'
+    assert lines[2].split()[0] == "5"
+
+
+def test_slicer_ctbl_uses_the_same_colors_as_itksnap(tmp_path):
+    labels = {1: "spleen", 2: "liver"}
+    snap = make_report.itksnap_label_file(labels)
+    ctbl = make_report.slicer_color_table(labels)
+
+    for label in labels:
+        red, green, blue = make_report.label_color(label)
+        assert f"{red:5d} {green:4d} {blue:4d}" in snap
+        assert f"{label} {labels[label]} {red} {green} {blue} 255" in ctbl
+
+
+def test_label_colors_are_deterministic_and_distinct():
+    first = [make_report.label_color(index) for index in range(1, 9)]
+    second = [make_report.label_color(index) for index in range(1, 9)]
+
+    assert first == second, "colors must be stable across runs"
+    assert len(set(first)) == len(first), "adjacent labels must not share a color"
+
+
+def test_collect_labels_keeps_declared_and_adds_observed():
+    declared = {0: "background", 1: "spleen"}
+    results = [{"structures": [{"label": 7, "name": "label 7"}]}]
+
+    labels = make_report.collect_labels(declared, results)
+
+    assert labels == {1: "spleen", 7: "label 7"}
+    assert 0 not in labels, "background must never become a visible label"
+
+
+def test_label_files_written_and_report_chip_matches(tmp_path):
+    data = np.zeros((8, 8, 8), dtype=np.uint8)
+    data[:4] = 1
+    write_mask(tmp_path / "seg.nii.gz", data)
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "metadata.json").write_text(
+        json.dumps(
+            {"network_data_format": {"outputs": {"pred": {"channel_def": {"0": "background",
+                                                                          "1": "spleen"}}}}}
+        )
+    )
+
+    env = {**os.environ, "OUTPUT_DIR": str(tmp_path), "BUNDLE_ROOT": str(tmp_path),
+           "BUNDLE_NAME": "spleen_ct_segmentation"}
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "make_report.py")],
+        env=env, capture_output=True, text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    assert '"spleen"' in (tmp_path / "labels.txt").read_text()
+    assert "1 spleen" in (tmp_path / "labels.ctbl").read_text()
+
+    # The report's colour chip must match the viewer colour for the same label.
+    red, green, blue = make_report.label_color(1)
+    assert f"rgb({red},{green},{blue})" in (tmp_path / "report.html").read_text()
+
+
 def test_report_survives_a_mask_it_cannot_measure(tmp_path):
     (tmp_path / "broken.nii.gz").write_bytes(b"not a nifti")
     data = np.zeros((4, 4, 4), dtype=np.uint8)

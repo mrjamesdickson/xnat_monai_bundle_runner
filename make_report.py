@@ -65,6 +65,9 @@ td.name { font-weight: 500; }
 .file-heading { font-size: 13px; font-weight: 600; color: var(--text-secondary);
                 margin: 28px 0 10px; word-break: break-all; }
 .caption { color: var(--text-muted); font-size: 12px; margin: 8px 0 0; }
+.chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+        margin-right: 8px; vertical-align: baseline;
+        box-shadow: 0 0 0 1px rgba(128,128,128,0.35); }
 footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border);
          color: var(--text-muted); font-size: 12px; }
 footer p { margin: 4px 0; }
@@ -98,6 +101,89 @@ def load_label_names(bundle_root: Path) -> dict[int, str]:
         if names:
             return names
     return {}
+
+
+def label_color(label: int) -> tuple[int, int, int]:
+    """Deterministic, well-separated RGB for a label index.
+
+    Golden-angle hue rotation keeps neighbouring labels far apart in hue and gives
+    the same structure the same colour on every run, which matters because the
+    colours are written into the ITK-SNAP file and mirrored in the HTML report.
+    """
+    import colorsys
+
+    hue = ((label - 1) * 137.508 % 360) / 360.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 0.62, 0.94)
+    return int(round(red * 255)), int(round(green * 255)), int(round(blue * 255))
+
+
+def itksnap_label_file(labels: dict[int, str]) -> str:
+    """Render an ITK-SNAP label description file.
+
+    Columns are IDX R G B A VIS MSH LABEL. Index 0 is always the reserved
+    "Clear Label" (transparent, hidden). ITK-SNAP and 3D Slicer both read this,
+    so the mask arrives in a viewer with its structures already named.
+    """
+    lines = [
+        "################################################",
+        "# ITK-SnAP Label Description File",
+        "# File format:",
+        "# IDX   -R-  -G-  -B-  -A--  VIS MSH  LABEL",
+        "# Fields:",
+        "#    IDX:   Zero-based index",
+        "#    -R-:   Red color component (0..255)",
+        "#    -G-:   Green color component (0..255)",
+        "#    -B-:   Blue color component (0..255)",
+        "#    -A-:   Label transparency (0.00 .. 1.00)",
+        "#    VIS:   Label visibility (0 or 1)",
+        "#    MSH:   Label mesh visibility (0 or 1)",
+        "#  LABEL:   Label description",
+        "################################################",
+        '    0     0    0    0        0  0  0    "Clear Label"',
+    ]
+    for label in sorted(labels):
+        if label == 0:
+            continue
+        red, green, blue = label_color(label)
+        name = labels[label].replace('"', "'")
+        lines.append(
+            f"{label:5d} {red:5d} {green:4d} {blue:4d}        1  1  1    \"{name}\""
+        )
+    return "\n".join(lines) + "\n"
+
+
+def slicer_color_table(labels: dict[int, str]) -> str:
+    """Render a 3D Slicer color table (.ctbl): index name R G B A, alpha 0-255.
+
+    Same indices and colours as the ITK-SNAP file, so a mask carried between the
+    two tools keeps one identity per structure.
+    """
+    lines = ["# Color table file", "# 1 values", "0 Clear 0 0 0 0"]
+    for label in sorted(labels):
+        if label == 0:
+            continue
+        red, green, blue = label_color(label)
+        name = labels[label].replace(" ", "_")
+        lines.append(f"{label} {name} {red} {green} {blue} 255")
+    return "\n".join(lines) + "\n"
+
+
+def collect_labels(label_names: dict[int, str], results: list[dict]) -> dict[int, str]:
+    """Every label the bundle declares, plus any the masks actually contain.
+
+    Declared-but-absent labels stay in the file so the colour map is stable across
+    subjects; observed-but-undeclared labels are added so nothing in the mask is
+    unnamed in the viewer.
+    """
+    labels = {
+        label: name
+        for label, name in label_names.items()
+        if label != 0 and name.lower() != "background"
+    }
+    for result in results:
+        for structure in result["structures"]:
+            labels.setdefault(structure["label"], structure["name"])
+    return labels
 
 
 def measure_mask(mask_path: Path, label_names: dict[int, str]) -> dict:
@@ -197,8 +283,12 @@ def render_html(report: dict) -> str:
             )
             width = max(item["volume_ml"] / largest * 100, 0.5)
             title = html.escape(f"{item['name']}: {item['volume_ml']:,.2f} mL")
+            red, green, blue = label_color(item["label"])
+            chip = (
+                f"<span class='chip' style='background:rgb({red},{green},{blue})'></span>"
+            )
             parts.append(
-                f"<tr><td class='name'>{html.escape(item['name'])}</td>"
+                f"<tr><td class='name'>{chip}{html.escape(item['name'])}</td>"
                 f"<td class='num'>{item['volume_ml']:,.2f}</td>"
                 f"<td class='num'>{item['voxels']:,}</td>"
                 f"<td class='num'>{share:.1f}%</td>"
@@ -267,10 +357,17 @@ def main() -> int:
 
     (output_dir / "report.html").write_text(render_html(report))
 
+    labels = collect_labels(label_names, results)
+    if labels:
+        (output_dir / "labels.txt").write_text(itksnap_label_file(labels))
+        (output_dir / "labels.ctbl").write_text(slicer_color_table(labels))
+    else:
+        print("WARNING: no labels to describe; skipping label files", file=sys.stderr)
+
     for result in results:
         for item in result["structures"]:
             print(f"  {item['name']}: {item['volume_ml']:,.2f} mL ({item['voxels']:,} voxels)")
-    print(f"wrote report.html, volumes.json, volumes.csv to {output_dir}")
+    print(f"wrote report.html, volumes.json, volumes.csv, labels.txt, labels.ctbl to {output_dir}")
     return 0
 
 
