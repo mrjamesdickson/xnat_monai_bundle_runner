@@ -51,6 +51,17 @@ Every run also measures the masks it produced and writes three files into the sa
 | `report.html` | Self-contained report: total volume, structure count, and a per-structure table with proportional bars (light/dark mode, no external assets) |
 | `volumes.json` | Machine-readable volumes plus voxel size, matrix, and voxel counts |
 | `volumes.csv` | Flat rows for spreadsheets and cross-session aggregation |
+| `labels.txt` | ITK-SNAP label description file — names and colours every structure in the mask |
+| `labels.ctbl` | 3D Slicer color table, same indices and colours |
+
+The two label files exist so a mask is self-describing when it leaves XNAT: load the
+segmentation in ITK-SNAP or Slicer, load the label file beside it, and the structures
+arrive named and consistently coloured instead of as bare integers. Colours are a
+deterministic golden-angle rotation on the label index — stable across runs and
+subjects — and the HTML report shows the same colour as a chip next to each structure,
+so the report reads as a legend for whatever viewer you open the mask in. Labels the
+bundle declares but that are absent from this particular mask are still listed, which
+keeps the colour map identical across a cohort.
 
 Volumes come from voxel counts multiplied by the image's own spacing. Structure
 names are read from the bundle's `metadata.json` `channel_def` when it declares
